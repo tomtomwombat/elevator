@@ -38,8 +38,9 @@ struct SimInstance {
     stats: Stats,
 }
 
-fn sim(color: Color, building: Building, policy: Box<dyn Policy>, traffic: Box<dyn Traffic>, stats: Stats) -> SimInstance {
+fn sim<P: Policy + 'static>(color: Color, building: Building, traffic: Box<dyn Traffic>, stats: Stats) -> SimInstance {
     let decision = Decision::new(building.elevators.len());
+    let policy = Box::new(P::new(&building));
     SimInstance {
         color,
         building,
@@ -56,41 +57,11 @@ fn create_sims(floors: usize, elevators: usize, window_ms: u64, traffic_scale: f
     let stats = Stats::new(window_ms);
 
     vec![
-        sim(
-            Color::Indexed(99),
-            b.clone(),
-            Box::new(policies::Simple::default()),
-            traffic.clone(),
-            stats.clone(),
-        ),
-        sim(
-            Color::Indexed(117),
-            b.clone(),
-            Box::new(policies::Scan::new(elevators)),
-            traffic.clone(),
-            stats.clone(),
-        ),
-        sim(
-            Color::Indexed(200),
-            b.clone(),
-            Box::new(policies::Gemini2::new(elevators)),
-            traffic.clone(),
-            stats.clone(),
-        ),
-        sim(
-            Color::Indexed(82),
-            b.clone(),
-            Box::new(policies::OpenAi::new(elevators)),
-            traffic.clone(),
-            stats.clone(),
-        ),
-        sim(
-            Color::Indexed(33),
-            b.clone(),
-            Box::new(policies::Bogo::default()),
-            traffic.clone(),
-            stats.clone(),
-        ),
+        sim::<policies::Simple>(Color::Indexed(99), b.clone(), traffic.clone(), stats.clone()),
+        sim::<policies::Scan>(Color::Indexed(117), b.clone(), traffic.clone(), stats.clone()),
+        sim::<policies::Gemini2>(Color::Indexed(200), b.clone(), traffic.clone(), stats.clone()),
+        sim::<policies::OpenAi>(Color::Indexed(82), b.clone(), traffic.clone(), stats.clone()),
+        sim::<policies::Bogo>(Color::Indexed(33), b.clone(), traffic.clone(), stats.clone()),
     ]
 }
 

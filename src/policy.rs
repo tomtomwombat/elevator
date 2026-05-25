@@ -17,6 +17,9 @@ impl Decision {
 }
 
 pub trait Policy {
+    fn new(_building: &Building) -> Self
+    where
+        Self: Sized;
     /// Notifies the policy that a person has requested to go to another floor.
     fn request(&mut self, _building: &Building, decision: &mut Decision, _person: &Person) -> usize;
     /// Notifies that an elevator has reached it's destination.

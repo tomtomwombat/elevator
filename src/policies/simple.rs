@@ -14,6 +14,10 @@ impl Default for Simple {
 }
 
 impl Policy for Simple {
+    fn new(_: &Building) -> Self {
+        Self::default()
+    }
+
     fn arrival(&mut self, building: &Building, decision: &mut Decision, elevator: usize) {
         let floor = building.elevators[elevator].floor(building.time_per_floor);
         decision.dests[elevator] = Some((floor + 1) % building.floors.len());

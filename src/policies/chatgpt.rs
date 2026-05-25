@@ -9,16 +9,14 @@ pub struct OpenAi {
     moving_up: Vec<bool>,
 }
 
-impl OpenAi {
-    pub fn new(num_elevators: usize) -> Self {
+impl Policy for OpenAi {
+    fn new(building: &Building) -> Self {
         Self {
-            targets: vec![0; num_elevators],
-            moving_up: vec![true; num_elevators],
+            targets: vec![0; building.elevators.len()],
+            moving_up: vec![true; building.elevators.len()],
         }
     }
-}
 
-impl Policy for OpenAi {
     fn arrival(&mut self, building: &Building, decision: &mut Decision, elevator: usize) {
         let e = &building.elevators[elevator];
         let floor = e.floor(building.time_per_floor);
@@ -100,11 +98,5 @@ impl Policy for OpenAi {
 
     fn name(&self) -> &'static str {
         "OpenAI"
-    }
-}
-
-impl Default for OpenAi {
-    fn default() -> Self {
-        Self::new(4)
     }
 }

@@ -10,16 +10,14 @@ pub struct Gemini {
     moving_up: Vec<bool>,
 }
 
-impl Gemini {
-    pub fn new(num_elevators: usize) -> Self {
+impl Policy for Gemini {
+    fn new(building: &Building) -> Self {
         Self {
-            targets: vec![BTreeSet::new(); num_elevators],
-            moving_up: vec![true; num_elevators],
+            targets: vec![BTreeSet::new(); building.elevators.len()],
+            moving_up: vec![true; building.elevators.len()],
         }
     }
-}
 
-impl Policy for Gemini {
     fn arrival(&mut self, building: &Building, decision: &mut Decision, elevator: usize) {
         let e = &building.elevators[elevator];
         let floor = e.floor(building.time_per_floor);

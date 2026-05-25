@@ -6,12 +6,6 @@ pub struct Scan {
 }
 
 impl Scan {
-    pub fn new(num_elevators: usize) -> Self {
-        Self {
-            moving_up: vec![true; num_elevators].into(),
-        }
-    }
-
     fn scan_distance_and_direction(num_floors: usize, from: usize, to: usize, moving_up: bool) -> (u64, bool) {
         let top = num_floors - 1;
         if moving_up {
@@ -51,6 +45,12 @@ impl Scan {
 }
 
 impl Policy for Scan {
+    fn new(building: &Building) -> Self {
+        Self {
+            moving_up: vec![true; building.elevators.len()].into(),
+        }
+    }
+
     fn arrival(&mut self, building: &Building, decision: &mut Decision, elevator: usize) {
         let floor = building.elevators[elevator].floor(building.time_per_floor);
         if floor == building.floors.len() - 1 {
