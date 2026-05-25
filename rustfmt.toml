@@ -1,0 +1,5 @@
+# cargo +nightly fmt
+
+wrap_comments = true
+format_code_in_doc_comments = true
+max_width = 140
