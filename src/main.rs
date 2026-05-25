@@ -57,11 +57,12 @@ fn create_sims(floors: usize, elevators: usize, window_ms: u64, traffic_scale: f
     let stats = Stats::new(window_ms);
 
     vec![
-        sim::<policies::Simple>(Color::Indexed(99), b.clone(), traffic.clone(), stats.clone()),
-        sim::<policies::Scan>(Color::Indexed(117), b.clone(), traffic.clone(), stats.clone()),
+        //sim::<policies::Simple>(Color::Indexed(99), b.clone(), traffic.clone(), stats.clone()),
+        //sim::<policies::Scan>(Color::Indexed(117), b.clone(), traffic.clone(), stats.clone()),
+        sim::<policies::GreedyUtilitarian>(Color::Indexed(33), b.clone(), traffic.clone(), stats.clone()),
         sim::<policies::Gemini2>(Color::Indexed(200), b.clone(), traffic.clone(), stats.clone()),
         sim::<policies::OpenAi>(Color::Indexed(82), b.clone(), traffic.clone(), stats.clone()),
-        sim::<policies::Bogo>(Color::Indexed(33), b.clone(), traffic.clone(), stats.clone()),
+        //sim::<policies::Bogo>(Color::Indexed(33), b.clone(), traffic.clone(), stats.clone()),
     ]
 }
 

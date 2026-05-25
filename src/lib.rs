@@ -57,7 +57,7 @@ impl Elevator {
 pub struct Floor {
     /// people[n] = list of people waiting for elevator n
     /// They enter the elevator in FIFO order (they are polite).
-    people: Box<[VecDeque<Person>]>,
+    pub people: Box<[VecDeque<Person>]>,
 }
 
 impl Floor {
@@ -69,7 +69,7 @@ impl Floor {
 
 #[derive(Debug, Clone)]
 pub struct Building {
-    floors: Box<[Floor]>,
+    pub floors: Box<[Floor]>,
     pub elevators: Box<[Elevator]>,
     /// The time it takes to travel between two adjacent floors
     time_per_floor: u64,
@@ -205,29 +205,29 @@ impl Building {
     /// Returns the next time an elevator arrival will happen.
     fn min_arrival(&self, dests: &[Option<usize>]) -> (usize, u64) {
         (0..dests.len())
-            .map(|i| self.arrival(i, dests))
+            .map(|elevator| {
+                if let Some(dest_floor) = dests[elevator] {
+                    self.arrival_time(elevator, dest_floor)
+                } else {
+                    u64::MAX
+                }
+            })
             .enumerate()
             .min_by_key(|(_, v)| *v)
             .unwrap()
     }
 
-    fn arrival(&self, index: usize, dests: &[Option<usize>]) -> u64 {
-        if let Some(dest) = dests[index] {
-            let e = &self.elevators[index];
-            let target_pos = dest as u64 * self.time_per_floor;
-            let travel_time = e.pos.abs_diff(target_pos);
-            let start_time = self.prev_time.max(e.busy_until);
-            trace!(
-                time = self.prev_time,
-                event = %"Will Arrive",
-                elevator = index,
-                pos = e.pos,
-                dest = dest,
-            );
-            start_time + travel_time
-        } else {
-            u64::MAX
-        }
+    pub fn arrival_time(&self, elevator: usize, dest_floor: usize) -> u64 {
+        let e = &self.elevators[elevator];
+        let travel_time = self.travel_time(elevator, dest_floor);
+        let start_time = self.prev_time.max(e.busy_until);
+        start_time + travel_time
+    }
+
+    pub fn travel_time(&self, elevator: usize, dest_floor: usize) -> u64 {
+        let e = &self.elevators[elevator];
+        let target_pos = dest_floor as u64 * self.time_per_floor;
+        e.pos.abs_diff(target_pos)
     }
 }
 
