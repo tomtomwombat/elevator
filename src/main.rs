@@ -82,6 +82,13 @@ fn create_sims(floors: usize, elevators: usize, window_ms: u64, freq: u64) -> Ve
             traffic.clone(),
             stats.clone(),
         ),
+        sim(
+            Color::Indexed(33),
+            b.clone(),
+            Box::new(policies::Bogo::default()),
+            traffic.clone(),
+            stats.clone(),
+        ),
     ]
 }
 
