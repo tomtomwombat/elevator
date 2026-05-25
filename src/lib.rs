@@ -236,7 +236,6 @@ mod tests {
     // $env:RUST_LOG="elevator=debug"
 
     use super::*;
-    use crate::policy::Simple;
     use crate::traffic::Random;
     use std::sync::Once;
 
@@ -257,7 +256,7 @@ mod tests {
         init_tracing();
 
         let mut building = Building::new(10, 2);
-        let mut policy = Simple::default();
+        let mut policy = crate::policies::Simple::default();
         let mut traffic = Random::new(10, 60_000);
         let mut stats = Stats::new(1_000);
         let mut decision = Decision::new(building.elevators.len());
