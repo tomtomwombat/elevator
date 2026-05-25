@@ -6,7 +6,6 @@ pub mod policies;
 pub mod policy;
 pub mod stats;
 pub mod traffic;
-pub mod traffics;
 use crate::policy::{Decision, Policy};
 use crate::stats::Stats;
 use crate::traffic::Traffic;
@@ -258,7 +257,7 @@ mod tests {
 
         let mut building = Building::new(10, 2);
         let mut policy = crate::policies::Simple::default();
-        let mut traffic = Random::new(10, 60_000);
+        let mut traffic = Random::new(10, vec![5.0], vec![5.0], 0.1);
         let mut stats = Stats::new(1_000);
         let mut decision = Decision::new(building.elevators.len());
 

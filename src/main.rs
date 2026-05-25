@@ -1,9 +1,9 @@
+use clap::Parser;
 use crossterm::{
     event::{self, Event, KeyCode},
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use clap::Parser;
 use elevator::args::Args;
 use elevator::policy::{Decision, Policy};
 use elevator::stats::Stats;
@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 const MAX_SPEED: u64 = 1048576;
 const START_SPEED: u64 = 1;
 const INITIAL_WINDOW_MS: u64 = 1_000;
-const INITIAL_FREQ: u64 = 2_000;
+const INITIAL_TRAFFIC_SCALE: f64 = 0.1;
 
 const TICK_RATE: Duration = Duration::from_millis(20);
 
@@ -50,9 +50,9 @@ fn sim(color: Color, building: Building, policy: Box<dyn Policy>, traffic: Box<d
     }
 }
 
-fn create_sims(floors: usize, elevators: usize, window_ms: u64, freq: u64) -> Vec<SimInstance> {
+fn create_sims(floors: usize, elevators: usize, window_ms: u64, traffic_scale: f64) -> Vec<SimInstance> {
     let b = Building::new(floors, elevators);
-    let traffic = Box::new(Random::new(floors, freq));
+    let traffic = Box::new(Random::new(floors, vec![floors as f64], vec![floors as f64], traffic_scale));
     let stats = Stats::new(window_ms);
 
     vec![
@@ -103,9 +103,9 @@ fn main() -> std::io::Result<()> {
     let mut q_idx = 0;
     let mut vis_idx = 0;
     let mut current_window_ms = INITIAL_WINDOW_MS;
-    let mut traffic_freq = INITIAL_FREQ;
+    let mut traffic_scale = INITIAL_TRAFFIC_SCALE;
 
-    let mut sims = create_sims(floors, elevators, current_window_ms, traffic_freq);
+    let mut sims = create_sims(floors, elevators, current_window_ms, traffic_scale);
 
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
@@ -140,7 +140,7 @@ fn main() -> std::io::Result<()> {
                 sim_speed,
                 current_window_ms / 1000,
                 sims[0].traffic.name(),
-                1.0 / (traffic_freq as f64 / 1000.0),
+                traffic_scale,
             );
             f.render_widget(
                 Paragraph::new(speed_text).block(Block::default().borders(Borders::ALL).title("Simulation Controls")),
@@ -351,22 +351,22 @@ fn main() -> std::io::Result<()> {
                     KeyCode::Tab => vis_idx = (vis_idx + 1) % sims.len(),
                     KeyCode::Char(',') | KeyCode::Char('<') => {
                         current_window_ms = (current_window_ms / 2).max(1000);
-                        sims = create_sims(floors, elevators, current_window_ms, traffic_freq);
+                        sims = create_sims(floors, elevators, current_window_ms, traffic_scale);
                     }
                     KeyCode::Char('>') | KeyCode::Char('.') => {
                         current_window_ms = (current_window_ms * 2).min(3600_000);
-                        sims = create_sims(floors, elevators, current_window_ms, traffic_freq);
+                        sims = create_sims(floors, elevators, current_window_ms, traffic_scale);
                     }
                     KeyCode::Down => {
-                        traffic_freq = traffic_freq + 100;
+                        traffic_scale = (traffic_scale - 0.1).max(0.1);
                         for sim in &mut sims {
-                            sim.traffic.set_freq(traffic_freq);
+                            sim.traffic.scale(traffic_scale);
                         }
                     }
                     KeyCode::Up => {
-                        traffic_freq = (traffic_freq - 100).max(100);
+                        traffic_scale += 0.1;
                         for sim in &mut sims {
-                            sim.traffic.set_freq(traffic_freq);
+                            sim.traffic.scale(traffic_scale);
                         }
                     }
                     _ => {}
