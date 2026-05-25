@@ -3,6 +3,8 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
+use clap::Parser;
+use elevator::args::Args;
 use elevator::policy::{Decision, Policy};
 use elevator::stats::Stats;
 use elevator::traffic::{Random, Traffic};
@@ -93,9 +95,9 @@ fn create_sims(floors: usize, elevators: usize, window_ms: u64, freq: u64) -> Ve
 }
 
 fn main() -> std::io::Result<()> {
-    let args: Vec<String> = std::env::args().collect();
-    let floors = args.get(1).and_then(|a| a.parse().ok()).unwrap_or(20);
-    let elevators = args.get(2).and_then(|a| a.parse().ok()).unwrap_or(4);
+    let args = Args::parse();
+    let floors = args.floors;
+    let elevators = args.elevators;
 
     let quantiles = [0.5, 0.95, 0.99, 0.999];
     let mut q_idx = 0;
