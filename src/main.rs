@@ -51,23 +51,23 @@ fn sim<P: Policy + 'static>(color: Color, building: Building, traffic: Box<dyn T
     }
 }
 
-fn create_sims(floors: usize, elevators: usize, window_ms: u64, traffic_scale: f64) -> Vec<SimInstance> {
+fn traffic(floors: usize, scale: f64) -> Box<dyn Traffic> {
+    let lull = Box::new(traffic::Random::new(floors, vec![floors as f64], vec![floors as f64], scale));
+    let spike = Box::new(traffic::Random::new(floors, vec![floors as f64], vec![floors as f64], 10.0 * scale));
+    Box::new(traffic::Cycle::new(vec![lull, spike], vec![60_000, 10_000]))
+}
+
+fn create_sims(floors: usize, elevators: usize, window_ms: u64, scale: f64) -> Vec<SimInstance> {
     let b = Building::new(floors, elevators);
-    let traffic = Box::new(traffic::Random::new(
-        floors,
-        vec![floors as f64],
-        vec![floors as f64],
-        traffic_scale,
-    ));
     let stats = Stats::new(window_ms);
 
     vec![
-        //sim::<policies::Simple>(Color::Indexed(99), b.clone(), traffic.clone(), stats.clone()),
-        //sim::<policies::Scan>(Color::Indexed(117), b.clone(), traffic.clone(), stats.clone()),
-        sim::<policies::GreedyUtilitarian>(Color::Indexed(33), b.clone(), traffic.clone(), stats.clone()),
-        sim::<policies::Gemini2>(Color::Indexed(200), b.clone(), traffic.clone(), stats.clone()),
-        sim::<policies::OpenAi>(Color::Indexed(82), b.clone(), traffic.clone(), stats.clone()),
-        //sim::<policies::Bogo>(Color::Indexed(33), b.clone(), traffic.clone(), stats.clone()),
+        //sim::<policies::Simple>(Color::Indexed(99), b.clone(), traffic(floors, scale), stats.clone()),
+        //sim::<policies::Scan>(Color::Indexed(117), b.clone(), traffic(floors, scale), stats.clone()),
+        sim::<policies::GreedyUtilitarian>(Color::Indexed(33), b.clone(), traffic(floors, scale), stats.clone()),
+        sim::<policies::Gemini2>(Color::Indexed(200), b.clone(), traffic(floors, scale), stats.clone()),
+        sim::<policies::OpenAi>(Color::Indexed(82), b.clone(), traffic(floors, scale), stats.clone()),
+        //sim::<policies::Bogo>(Color::Indexed(33), b.clone(), traffic(floors, scale), stats.clone()),
     ]
 }
 
