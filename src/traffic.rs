@@ -1,5 +1,8 @@
 mod random;
+mod spiky;
+
 pub use random::Random;
+pub use spiky::Spiky;
 
 pub trait Traffic {
     /// Returns the duration until the next request.

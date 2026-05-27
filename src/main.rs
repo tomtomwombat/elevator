@@ -7,7 +7,7 @@ use crossterm::{
 use elevator::args::Args;
 use elevator::policy::{Decision, Policy};
 use elevator::stats::Stats;
-use elevator::traffic::{Random, Traffic};
+use elevator::traffic::{self, Traffic};
 use elevator::{Building, policies};
 use ratatui::{
     Terminal,
@@ -53,7 +53,12 @@ fn sim<P: Policy + 'static>(color: Color, building: Building, traffic: Box<dyn T
 
 fn create_sims(floors: usize, elevators: usize, window_ms: u64, traffic_scale: f64) -> Vec<SimInstance> {
     let b = Building::new(floors, elevators);
-    let traffic = Box::new(Random::new(floors, vec![floors as f64], vec![floors as f64], traffic_scale));
+    let traffic = Box::new(traffic::Random::new(
+        floors,
+        vec![floors as f64],
+        vec![floors as f64],
+        traffic_scale,
+    ));
     let stats = Stats::new(window_ms);
 
     vec![
