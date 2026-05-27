@@ -1,3 +1,4 @@
+use std::cmp;
 use std::collections::VecDeque;
 use tracing::{debug, trace};
 
@@ -77,6 +78,8 @@ pub struct Building {
     stop_penalty: u64,
     /// Previous event time
     prev_time: u64,
+    /// Previous request time
+    prev_req_time: u64,
 }
 
 impl Building {
@@ -88,6 +91,7 @@ impl Building {
                 .collect::<Vec<_>>()
                 .into(),
             prev_time: 0,
+            prev_req_time: 0,
             time_per_floor: TIME_PER_FLOOR,
             stop_penalty: STOP_TIME,
         }
@@ -116,20 +120,18 @@ impl Building {
     pub fn run(&mut self, until: u64, policy: &mut dyn Policy, decision: &mut Decision, traffic: &mut dyn Traffic, stats: &mut Stats) {
         while self.prev_time < until {
             // Calculate the next event that will happen, skip simulation to that event
-            let (arriving, arrival_time) = self.min_arrival(&decision.dests);
+            let (arriving, arrival_time) = self.next_arrival(&decision.dests);
             let waiting = decision.waits.iter().enumerate().min_by_key(|&(_, &v)| v).unwrap().0;
-            let next_request = traffic.peek().req_time;
-            assert!(next_request >= self.prev_time);
+            let next_request = cmp::max(self.prev_time, traffic.when().saturating_add(self.prev_req_time));
             let events = [arrival_time, decision.waits[waiting], next_request];
-            let next_event = events.iter().enumerate().min_by_key(|&(_, &v)| v).unwrap();
-            let time = *next_event.1;
+            let (next_event, &time) = events.iter().enumerate().min_by_key(|&(_, &v)| v).unwrap();
             assert!(time >= self.prev_time);
             if time > until {
                 break;
             }
             trace!(time = time, event = %"Events", ?events);
             self.move_elevators(time, &decision.dests);
-            match next_event.0 {
+            match next_event {
                 // Process an elevator arriving at a floor and opening it's doors.
                 // Passengers who's floor this is leave the elevator first,
                 // then passengers waiting at the floor enter the elevator FIFO.
@@ -170,11 +172,15 @@ impl Building {
                 }
                 // Process a new person spawning at a source floor and requesting to go to destination floor.
                 2 => {
-                    let new = traffic.pop();
-                    assert!(new.src != new.dest);
+                    let (src, dest) = traffic.next(time);
+                    assert!(src != dest);
+                    assert!(src < self.floors.len());
+                    assert!(dest < self.floors.len());
+                    let new = Person { src, dest, req_time: time };
                     let assignment = policy.request(self, decision, &new);
                     debug!(time = time, event = %"Request", elevator = assignment, person = ?new);
                     self.floors[new.src].people[assignment].push_back(new);
+                    self.prev_req_time = time;
                 }
                 _ => unreachable!(),
             }
@@ -203,7 +209,7 @@ impl Building {
     }
 
     /// Returns the next time an elevator arrival will happen.
-    fn min_arrival(&self, dests: &[Option<usize>]) -> (usize, u64) {
+    fn next_arrival(&self, dests: &[Option<usize>]) -> (usize, u64) {
         (0..dests.len())
             .map(|elevator| {
                 if let Some(dest_floor) = dests[elevator] {

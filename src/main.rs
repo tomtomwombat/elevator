@@ -108,7 +108,7 @@ fn main() -> std::io::Result<()> {
 
             // 1. Controls Panel
             let speed_text = format!(
-                " [Q] Quit    [+/-] Speed ({}x)    [</>] Window ({}s)    [←/→] P    [↑/↓] Traffic ({} {:.3}p/s)    [Tab] Vis",
+                " [Q] Quit    [+/-] Speed ({}x)    [</>] Window ({}s)    [←/→] P    [↑/↓] Traffic ({} {:.3}p/s)    [Tab] Switch Visualization",
                 sim_speed,
                 current_window_ms / 1000,
                 sims[0].traffic.name(),
@@ -330,7 +330,7 @@ fn main() -> std::io::Result<()> {
                         sims = create_sims(floors, elevators, current_window_ms, traffic_scale);
                     }
                     KeyCode::Down => {
-                        traffic_scale = (traffic_scale - 0.1).max(0.1);
+                        traffic_scale = (traffic_scale - 0.1).max(0.0);
                         for sim in &mut sims {
                             sim.traffic.scale(traffic_scale);
                         }

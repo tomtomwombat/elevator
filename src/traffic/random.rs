@@ -1,14 +1,12 @@
-use crate::{Person, Traffic};
+use crate::Traffic;
 
-/// A person at a random floor wants to go to a random floor every `freq`.
+/// A person at a random floor wants to go to a random floor every `period`.
 #[derive(Clone)]
 pub struct Random {
-    src_distr: Vec<f64>,
-    dest_distr: Vec<f64>,
-    freq: u64,
+    src_distr: Box<[f64]>,
+    dest_distr: Box<[f64]>,
+    period: u64,
     rng: fastrand::Rng,
-    prev_time: u64,
-    next: Person,
 }
 
 impl Random {
@@ -25,24 +23,21 @@ impl Random {
         let mut t = Self {
             src_distr: Self::prefix_sum(floors, src_distr),
             dest_distr: Self::prefix_sum(floors, dest_distr),
-            freq: u64::MAX,
+            period: u64::MAX,
             rng: fastrand::Rng::with_seed(8549089435),
-            next: Person::default(),
-            prev_time: 0,
         };
         t.scale(per_sec);
-        t.gen_next();
         t
     }
 
-    fn prefix_sum(size: usize, mut data: Vec<f64>) -> Vec<f64> {
+    fn prefix_sum(size: usize, mut data: Vec<f64>) -> Box<[f64]> {
         assert!(data.len() <= size);
         data.resize(size, 1.0);
         assert_eq!(data.len(), size);
         for i in 1..data.len() {
             data[i] += data[i - 1];
         }
-        data
+        data.into()
     }
 
     fn sample(rng: &mut fastrand::Rng, prefix_sum: &[f64], exclude: Option<usize>) -> usize {
@@ -64,39 +59,25 @@ impl Random {
         }
         unreachable!();
     }
-
-    fn gen_next(&mut self) {
-        let req_time = self.prev_time.saturating_add(self.freq);
-        let (src, dest) = match self.rng.bool() {
-            true => {
-                let src = Self::sample(&mut self.rng, &self.src_distr, None);
-                (src, Self::sample(&mut self.rng, &self.dest_distr, Some(src)))
-            }
-            false => {
-                let dest = Self::sample(&mut self.rng, &self.dest_distr, None);
-                (Self::sample(&mut self.rng, &self.src_distr, Some(dest)), dest)
-            }
-        };
-        self.prev_time = req_time;
-        self.next = Person { src, dest, req_time };
-    }
 }
 
 impl Traffic for Random {
-    fn peek(&self) -> Person {
-        self.next
+    fn when(&self) -> u64 {
+        self.period
     }
 
-    fn pop(&mut self) -> Person {
-        let n = self.next;
-        self.gen_next();
-        n
+    fn next(&mut self, _time: u64) -> (usize, usize) {
+        if self.rng.bool() {
+            let src = Self::sample(&mut self.rng, &self.src_distr, None);
+            (src, Self::sample(&mut self.rng, &self.dest_distr, Some(src)))
+        } else {
+            let dest = Self::sample(&mut self.rng, &self.dest_distr, None);
+            (Self::sample(&mut self.rng, &self.src_distr, Some(dest)), dest)
+        }
     }
 
     fn scale(&mut self, per_sec: f64) {
-        assert!(per_sec > 0.0f64, "todo, might requiring changing traffic API");
-        let freq = (1000.0 / per_sec).round() as u64;
-        self.freq = freq;
+        self.period = (1000.0 / per_sec).round() as u64;
     }
 
     fn name(&self) -> &'static str {
