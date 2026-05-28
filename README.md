@@ -8,6 +8,7 @@ An elevator simulation with a collection of traffic patterns and algorithm imple
 
 ## Usage
 ```
+cargo run -- --help
 cargo run --release
 cargo run --release -- --floors 20 --elevators 4
 cargo run --release -- -f 20 -e 4

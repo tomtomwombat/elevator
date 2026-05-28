@@ -11,9 +11,10 @@ use crate::policy::{Decision, Policy};
 use crate::stats::Stats;
 use crate::traffic::Traffic;
 
-const ELEVATOR_CAPACITY: usize = 8;
-const TIME_PER_FLOOR: u64 = 500;
-const STOP_TIME: u64 = 2_000;
+/// Maximum number of people on a floor waiting for an elevator.
+/// Prevents potentially overwhelming memory when speeding up the simulator
+/// massively.
+const MAX_WAITING: usize = 100_000;
 
 #[derive(Default, Debug, Copy, Clone)]
 pub struct Person {
@@ -62,9 +63,14 @@ pub struct Floor {
 }
 
 impl Floor {
-    pub fn new(num_elevators: usize) -> Self {
-        let people = (0..num_elevators).map(|_| Default::default()).collect::<Vec<_>>().into();
+    pub fn new(elevators: usize) -> Self {
+        let people = (0..elevators).map(|_| Default::default()).collect::<Vec<_>>().into();
         Self { people }
+    }
+
+    #[inline]
+    pub fn len(&self) -> usize {
+        self.people.len()
     }
 }
 
@@ -75,26 +81,73 @@ pub struct Building {
     /// The time it takes to travel between two adjacent floors
     time_per_floor: u64,
     /// Extra time it takes to stop/start and open/close doors.
-    stop_penalty: u64,
+    time_per_stop: u64,
     /// Previous event time
     prev_time: u64,
     /// Previous request time
     prev_req_time: u64,
 }
 
-impl Building {
-    pub fn new(num_floors: usize, num_elevators: usize) -> Self {
-        Self {
-            floors: (0..num_floors).map(|_| Floor::new(num_elevators)).collect::<Vec<_>>().into(),
-            elevators: (0..num_elevators)
-                .map(|_| Elevator::new(ELEVATOR_CAPACITY))
-                .collect::<Vec<_>>()
-                .into(),
+#[derive(Default, Debug, Clone)]
+pub struct BuildingBuilder {
+    time_per_floor: Option<u64>,
+    time_per_stop: Option<u64>,
+    elevators: Option<usize>,
+    floors: Option<usize>,
+    elevator_capacity: Option<usize>,
+}
+
+macro_rules! impl_builder {
+    ($($field:ident: $ty:ty),* $(,)?) => {
+        $(
+            pub fn $field(mut self, $field: $ty) -> Self {
+                self.$field = Some($field);
+                self
+            }
+        )*
+    };
+}
+
+impl BuildingBuilder {
+    pub(crate) const DEFAULT_FLOORS: usize = 20;
+    pub(crate) const DEFAULT_ELEVATORS: usize = 4;
+    pub(crate) const DEFAULT_ELEVATOR_CAPACITY: usize = 8;
+    pub(crate) const DEFAULT_TIME_PER_FLOOR: u64 = 500;
+    pub(crate) const DEFAULT_TIME_PER_STOP: u64 = 2_000;
+
+    impl_builder! {
+        time_per_floor: u64,
+        time_per_stop: u64,
+        elevators: usize,
+        floors: usize,
+        elevator_capacity: usize,
+    }
+
+    pub fn build(&self) -> Building {
+        let elevators = self.elevators.unwrap_or(Self::DEFAULT_FLOORS);
+        let floors = self.floors.unwrap_or(Self::DEFAULT_ELEVATORS);
+        let time_per_floor = self.time_per_floor.unwrap_or(Self::DEFAULT_TIME_PER_FLOOR);
+        let time_per_stop = self.time_per_stop.unwrap_or(Self::DEFAULT_TIME_PER_STOP);
+        let elevator_capacity = self.elevator_capacity.unwrap_or(Self::DEFAULT_ELEVATOR_CAPACITY);
+        assert!(elevators <= 1_000);
+        assert!(floors <= 100_000);
+        assert!(time_per_floor <= 1_000_000);
+        assert!(time_per_stop <= 1_000_000);
+        assert!(elevator_capacity <= 100_000);
+        Building {
+            floors: (0..floors).map(|_| Floor::new(elevators)).collect::<Vec<_>>().into(),
+            elevators: (0..elevators).map(|_| Elevator::new(elevator_capacity)).collect::<Vec<_>>().into(),
             prev_time: 0,
             prev_req_time: 0,
-            time_per_floor: TIME_PER_FLOOR,
-            stop_penalty: STOP_TIME,
+            time_per_floor,
+            time_per_stop,
         }
+    }
+}
+
+impl Building {
+    pub fn builder() -> BuildingBuilder {
+        Default::default()
     }
 
     pub fn time_per_floor(&self) -> u64 {
@@ -138,7 +191,7 @@ impl Building {
                 0 => {
                     let e = &mut self.elevators[arriving];
                     let floor_idx = e.floor(self.time_per_floor);
-                    e.busy_until = time + self.stop_penalty;
+                    e.busy_until = time + self.time_per_stop;
 
                     assert_eq!(e.pos, decision.dests[arriving].unwrap() as u64 * self.time_per_floor);
                     debug!(time = time, event = %"Arrival", elevator = arriving, floor = floor_idx, waiting = ?self.floors[floor_idx].people[arriving]);
@@ -176,10 +229,12 @@ impl Building {
                     assert!(src != dest);
                     assert!(src < self.floors.len());
                     assert!(dest < self.floors.len());
-                    let new = Person { src, dest, req_time: time };
-                    let assignment = policy.request(self, decision, &new);
-                    debug!(time = time, event = %"Request", elevator = assignment, person = ?new);
-                    self.floors[new.src].people[assignment].push_back(new);
+                    if self.floors[src].len() < MAX_WAITING {
+                        let new = Person { src, dest, req_time: time };
+                        let assignment = policy.request(self, decision, &new);
+                        debug!(time = time, event = %"Request", elevator = assignment, person = ?new);
+                        self.floors[src].people[assignment].push_back(new);
+                    }
                     self.prev_req_time = time;
                 }
                 _ => unreachable!(),
@@ -211,13 +266,7 @@ impl Building {
     /// Returns the next time an elevator arrival will happen.
     fn next_arrival(&self, dests: &[Option<usize>]) -> (usize, u64) {
         (0..dests.len())
-            .map(|elevator| {
-                if let Some(dest_floor) = dests[elevator] {
-                    self.arrival_time(elevator, dest_floor)
-                } else {
-                    u64::MAX
-                }
-            })
+            .map(|e| dests[e].map_or(u64::MAX, |d| self.arrival_time(e, d)))
             .enumerate()
             .min_by_key(|(_, v)| *v)
             .unwrap()
@@ -261,7 +310,7 @@ mod tests {
     fn simple() {
         init_tracing();
 
-        let mut building = Building::new(10, 2);
+        let mut building = Building::builder().floors(10).elevators(2).build();
         let mut policy = crate::policies::Simple::default();
         let mut traffic = Random::new(10, vec![5.0], vec![5.0], 0.1);
         let mut stats = Stats::new(1_000);

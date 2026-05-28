@@ -21,7 +21,7 @@ use ratatui::{
 use std::time::{Duration, Instant};
 
 const MAX_SPEED: u64 = 1048576;
-const START_SPEED: u64 = 1;
+const INITIAL_SPEED: u64 = 1;
 const INITIAL_WINDOW_MS: u64 = 1_000;
 const INITIAL_TRAFFIC_SCALE: f64 = 0.1;
 
@@ -58,7 +58,7 @@ fn traffic(floors: usize, scale: f64) -> Box<dyn Traffic> {
 }
 
 fn create_sims(floors: usize, elevators: usize, window_ms: u64, scale: f64) -> Vec<SimInstance> {
-    let b = Building::new(floors, elevators);
+    let b = Building::builder().floors(floors).elevators(elevators).build();
     let stats = Stats::new(window_ms);
 
     vec![
@@ -91,7 +91,7 @@ fn main() -> std::io::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut last_tick = Instant::now();
-    let mut sim_speed: u64 = START_SPEED;
+    let mut sim_speed: u64 = INITIAL_SPEED;
 
     loop {
         terminal.draw(|f| {
