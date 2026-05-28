@@ -5,22 +5,23 @@ use clap::Parser;
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
-    /// number of floors
+    /// Number of floors
     #[arg(short, long, default_value_t = BuildingBuilder::DEFAULT_FLOORS)]
     pub floors: usize,
-    /// number of elevators
+    /// Number of elevators
     #[arg(short, long, default_value_t = BuildingBuilder::DEFAULT_ELEVATORS)]
     pub elevators: usize,
-    /// max number of people in an elevator
+    /// Max number of people in an elevator
     #[arg(long, default_value_t = BuildingBuilder::DEFAULT_ELEVATOR_CAPACITY)]
     pub elevator_capacity: usize,
-    /// time it takes to travel between floors (ms)
+    /// Time it takes to travel between floors (ms)
     #[arg(long, default_value_t = BuildingBuilder::DEFAULT_TIME_PER_FLOOR)]
     pub time_per_floor: u64,
-    /// time it takes to stop at a floor (ms)
+    /// Time it takes to stop at a floor (ms)
     #[arg(long, default_value_t = BuildingBuilder::DEFAULT_TIME_PER_STOP)]
     pub time_per_stop: u64,
-
+    /// List of polices that control the building's elevators. Each policy gets
+    /// its own building.
     #[arg(
         short, long, num_args = 1..,
         value_parser = clap::builder::PossibleValuesParser::new(policies::ALL),

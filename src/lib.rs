@@ -3,8 +3,10 @@ use std::collections::VecDeque;
 use tracing::{debug, trace};
 
 pub mod args;
+pub mod controls;
 pub mod policies;
 pub mod policy;
+pub mod simulation;
 pub mod stats;
 pub mod traffic;
 use crate::policy::{Decision, Policy};
@@ -178,9 +180,14 @@ impl Building {
 }
 
 impl Building {
-    // pub fn run<P: Policy, T: Traffic>(&mut self, until: u64, policy: &mut P,
-    // decision: &mut Decision, traffic: &mut T, stats: &mut Stats) {
-    pub fn run(&mut self, until: u64, policy: &mut dyn Policy, decision: &mut Decision, traffic: &mut dyn Traffic, stats: &mut Stats) {
+    pub fn run<P: Policy + ?Sized, T: Traffic + ?Sized>(
+        &mut self,
+        until: u64,
+        policy: &mut P,
+        decision: &mut Decision,
+        traffic: &mut T,
+        stats: &mut Stats,
+    ) {
         while self.prev_time < until {
             // Calculate the next event that will happen, skip simulation to that event
             let (arriving, arrival_time) = self.next_arrival(&decision.dests);
@@ -323,9 +330,9 @@ mod tests {
         let mut building = Building::builder().floors(10).elevators(2).build();
         let mut policy = crate::policies::Simple::default();
         let mut traffic = Random::new(10, vec![5.0], vec![5.0], 0.1);
-        let mut stats = Stats::new(1_000);
+        let mut stats = Stats::new(1_000, 0);
         let mut decision = Decision::new(building.elevators.len());
 
-        building.run(1000_000, &mut policy, &mut decision, &mut traffic, &mut stats);
+        building.run(10_000, &mut policy, &mut decision, &mut traffic, &mut stats);
     }
 }

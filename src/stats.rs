@@ -17,9 +17,9 @@ pub struct Stats {
 }
 
 impl Stats {
-    pub fn new(window: u64) -> Self {
+    pub fn new(window: u64, start: u64) -> Self {
         Self {
-            start: 0,
+            start,
             window,
             windows: Default::default(),
         }

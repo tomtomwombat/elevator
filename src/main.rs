@@ -4,11 +4,13 @@ use crossterm::{
     execute,
     terminal::{EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode},
 };
-use elevator::args::Args;
-use elevator::policy::{Decision, Policy};
-use elevator::stats::Stats;
-use elevator::traffic::{self, Traffic};
-use elevator::{Building, policies};
+use elevator::{
+    args::Args,
+    controls::Controls,
+    policies,
+    simulation::Simulation,
+    traffic::{self, Traffic},
+};
 use ratatui::{
     Terminal,
     backend::CrosstermBackend,
@@ -19,11 +21,6 @@ use ratatui::{
     widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, LegendPosition, Paragraph},
 };
 use std::time::{Duration, Instant};
-
-const MAX_SPEED: u64 = 1048576;
-const INITIAL_SPEED: u64 = 1;
-const INITIAL_WINDOW_MS: u64 = 1_000;
-const INITIAL_TRAFFIC_SCALE: f64 = 0.1;
 
 const TICK_RATE: Duration = Duration::from_millis(20);
 
@@ -36,49 +33,10 @@ const POLICY_COLORS: [Color; 5] = [
     Color::Indexed(82),
 ];
 
-struct SimInstance {
-    color: Color,
-    building: Building,
-    policy: Box<dyn Policy>,
-    traffic: Box<dyn Traffic>,
-    decision: Decision,
-    stats: Stats,
-    name: String,
-}
-
-impl SimInstance {
-    pub fn name(&self) -> &str {
-        &self.name
-    }
-}
-
 fn traffic(floors: usize, scale: f64) -> Box<dyn Traffic> {
     let lull = Box::new(traffic::Random::new(floors, vec![floors as f64], vec![floors as f64], scale));
     let spike = Box::new(traffic::Random::new(floors, vec![floors as f64], vec![floors as f64], 10.0 * scale));
     Box::new(traffic::Cycle::new(vec![lull, spike], vec![60_000, 10_000]))
-}
-
-fn create_sims(policies: &[String], b: Building, window_ms: u64, scale: f64) -> Vec<SimInstance> {
-    let stats = Stats::new(window_ms);
-    let floors = b.num_floors();
-    policies
-        .iter()
-        .enumerate()
-        .map(|(i, name)| {
-            let color = POLICY_COLORS[i % POLICY_COLORS.len()];
-            let decision = Decision::new(b.elevators.len());
-            let policy = policies::new(name, &b);
-            SimInstance {
-                color,
-                building: b.clone(),
-                policy,
-                traffic: traffic(floors, scale),
-                decision,
-                stats: stats.clone(),
-                name: name.into(),
-            }
-        })
-        .collect()
 }
 
 fn main() -> std::io::Result<()> {
@@ -89,10 +47,17 @@ fn main() -> std::io::Result<()> {
     let quantiles = [0.5, 0.95, 0.99, 0.999];
     let mut q_idx = 0;
     let mut vis_idx = 0;
-    let mut current_window_ms = INITIAL_WINDOW_MS;
-    let mut traffic_scale = INITIAL_TRAFFIC_SCALE;
 
-    let mut sims = create_sims(&args.policies, b.clone(), current_window_ms, traffic_scale);
+    let mut controls = Controls::default();
+
+    let mut sims: Vec<Simulation> = args
+        .policies
+        .iter()
+        .map(|name| {
+            let t = traffic(floors, controls.traffic_scale());
+            Simulation::new(b.clone(), policies::new(name, &b), t, &controls)
+        })
+        .collect();
 
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
@@ -101,7 +66,6 @@ fn main() -> std::io::Result<()> {
     let mut terminal = Terminal::new(backend)?;
 
     let mut last_tick = Instant::now();
-    let mut sim_speed: u64 = INITIAL_SPEED;
 
     loop {
         terminal.draw(|f| {
@@ -122,14 +86,8 @@ fn main() -> std::io::Result<()> {
                 .split(app_layout[0]);
 
             // 1. Controls Panel
-            let speed_text = format!(
-                " [Q] Quit    [+/-] Speed ({}x)    [</>] Window ({}s)    [←/→] Policy    [↑/↓] Traffic Scale {:.3}    [Tab] Switch Visualization",
-                sim_speed,
-                current_window_ms / 1000,
-                traffic_scale,
-            );
             f.render_widget(
-                Paragraph::new(speed_text).block(Block::default().borders(Borders::ALL).title("Simulation Controls")),
+                Paragraph::new(controls.to_string()).block(Block::default().borders(Borders::ALL).title("Simulation Controls")),
                 left_layout[0],
             );
 
@@ -177,7 +135,7 @@ fn main() -> std::io::Result<()> {
             }
             f.render_widget(
                 Paragraph::new(vis_lines).block(Block::default().borders(Borders::ALL).title(Span::styled(
-                    format!("Visualization ({})", vis_sim.name()),
+                    format!("Visualization ({})", args.policies[vis_idx]),
                     Style::default().add_modifier(Modifier::BOLD),
                 ))),
                 app_layout[1],
@@ -215,15 +173,15 @@ fn main() -> std::io::Result<()> {
                 datasets_data.push(points);
             }
 
-            let datasets: Vec<Dataset> = sims
-                .iter()
-                .enumerate()
-                .map(|(i, sim)| {
+            let datasets: Vec<Dataset> = (0..sims.len())
+                .map(|i| {
+                    let color = POLICY_COLORS[i & POLICY_COLORS.len()];
+                    let name = args.policies[i].as_str();
                     Dataset::default()
-                        .name(sim.name())
+                        .name(name)
                         .marker(symbols::Marker::Octant)
                         .graph_type(GraphType::Line)
-                        .style(Style::default().fg(sim.color))
+                        .style(Style::default().fg(color))
                         .data(&datasets_data[i])
                 })
                 .collect();
@@ -280,15 +238,15 @@ fn main() -> std::io::Result<()> {
                 hist_datasets_data.push(points);
             }
 
-            let hist_datasets: Vec<Dataset> = sims
-                .iter()
-                .enumerate()
-                .map(|(i, sim)| {
+            let hist_datasets: Vec<Dataset> = (0..sims.len())
+                .map(|i| {
+                    let color = POLICY_COLORS[i & POLICY_COLORS.len()];
+                    let name = args.policies[i].as_str();
                     Dataset::default()
-                        .name(sim.name())
+                        .name(name)
                         .marker(symbols::Marker::Octant)
                         .graph_type(GraphType::Line)
-                        .style(Style::default().fg(sim.color))
+                        .style(Style::default().fg(color))
                         .data(&hist_datasets_data[i])
                 })
                 .collect();
@@ -330,33 +288,13 @@ fn main() -> std::io::Result<()> {
 
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Char('Q') => break,
-                    KeyCode::Char('+') | KeyCode::Char('=') => sim_speed = (sim_speed * 2).min(MAX_SPEED),
-                    KeyCode::Char('-') | KeyCode::Char('_') => sim_speed = (sim_speed / 2).max(1),
                     KeyCode::Right => q_idx = (q_idx + 1) % quantiles.len(),
                     KeyCode::Left => q_idx = q_idx.saturating_sub(1),
                     KeyCode::Tab => vis_idx = (vis_idx + 1) % sims.len(),
-                    KeyCode::Char(',') | KeyCode::Char('<') => {
-                        current_window_ms = (current_window_ms / 2).max(1000);
-                        sims = create_sims(&args.policies, b.clone(), current_window_ms, traffic_scale);
-                    }
-                    KeyCode::Char('>') | KeyCode::Char('.') => {
-                        current_window_ms = (current_window_ms * 2).min(3600_000);
-                        sims = create_sims(&args.policies, b.clone(), current_window_ms, traffic_scale);
-                    }
-                    KeyCode::Down => {
-                        traffic_scale = (traffic_scale - 0.1).max(0.0);
-                        for sim in &mut sims {
-                            sim.traffic.scale(traffic_scale);
-                        }
-                    }
-                    KeyCode::Up => {
-                        traffic_scale += 0.1;
-                        for sim in &mut sims {
-                            sim.traffic.scale(traffic_scale);
-                        }
-                    }
                     _ => {}
                 }
+
+                controls.handle_input(key.code, &mut sims);
             }
         }
 
@@ -364,17 +302,9 @@ fn main() -> std::io::Result<()> {
         let now = Instant::now();
         let elapsed = now.duration_since(last_tick);
         last_tick = now;
-
-        let sim_step = elapsed.as_millis() as u64 * sim_speed;
+        let sim_step = elapsed.as_millis() as u64 * controls.speed();
         for sim in &mut sims {
-            let target_time = sim.building.prev_time() + sim_step;
-            sim.building.run(
-                target_time,
-                sim.policy.as_mut(),
-                &mut sim.decision,
-                sim.traffic.as_mut(),
-                &mut sim.stats,
-            );
+            sim.tick(sim.building.prev_time() + sim_step);
         }
     }
 
