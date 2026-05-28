@@ -79,10 +79,6 @@ impl Traffic for Random {
     fn scale(&mut self, per_sec: f64) {
         self.period = (1000.0 / per_sec).round() as u64;
     }
-
-    fn name(&self) -> &'static str {
-        "Random"
-    }
 }
 
 #[cfg(test)]
@@ -138,10 +134,8 @@ mod tests {
         weights.resize(num, 1.0);
         let total: f64 = weights.iter().sum::<f64>() - weights[exclude];
         let expected: Vec<f64> = (0..num).map(|i| if i == exclude { 0.0 } else { weights[i] / total }).collect();
-        println!("counts = {:?}", counts);
         for i in 0..num {
             let observed = counts[i] as f64 / N as f64;
-
             assert!(
                 (observed - expected[i]).abs() < EPS,
                 "floor={i}: got {observed}, expected {}",

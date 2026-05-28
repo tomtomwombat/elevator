@@ -13,8 +13,6 @@ pub trait Traffic {
     /// `_scale` can be interpreted however; `scale`'s implementation is
     /// arbitrary and has no bearing on correctness.
     fn scale(&mut self, _scale: f64);
-    /// Returns the name of the traffic pattern.
-    fn name(&self) -> &'static str;
 }
 
 pub struct Nothing;
@@ -29,10 +27,6 @@ impl Traffic for Nothing {
     }
 
     fn scale(&mut self, _: f64) {}
-
-    fn name(&self) -> &'static str {
-        "Nothing"
-    }
 }
 
 /// Cycles between traffics for duration.
@@ -79,10 +73,6 @@ impl Traffic for Cycle {
         for t in self.between.iter_mut() {
             t.scale(x);
         }
-    }
-
-    fn name(&self) -> &'static str {
-        "Cycle"
     }
 }
 
@@ -137,10 +127,6 @@ macro_rules! impl_traffic_from_inner {
 
             fn scale(&mut self, x: f64) {
                 self.$inner.scale(x)
-            }
-
-            fn name(&self) -> &'static str {
-                stringify!($type)
             }
         }
     };

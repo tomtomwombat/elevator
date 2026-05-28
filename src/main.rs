@@ -113,10 +113,9 @@ fn main() -> std::io::Result<()> {
 
             // 1. Controls Panel
             let speed_text = format!(
-                " [Q] Quit    [+/-] Speed ({}x)    [</>] Window ({}s)    [←/→] P    [↑/↓] Traffic ({} {:.3}p/s)    [Tab] Switch Visualization",
+                " [Q] Quit    [+/-] Speed ({}x)    [</>] Window ({}s)    [←/→] P    [↑/↓] Traffic Scale {:.3}    [Tab] Switch Visualization",
                 sim_speed,
                 current_window_ms / 1000,
-                sims[0].traffic.name(),
                 traffic_scale,
             );
             f.render_widget(
