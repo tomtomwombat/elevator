@@ -141,141 +141,20 @@ fn main() -> std::io::Result<()> {
                 app_layout[1],
             );
 
-            // Combined Throughput Chart with Panning and Axes
-            let chart_area = left_layout[1];
-            let max_data_points = chart_area.width.saturating_sub(10) as usize;
             for sim in &mut sims {
-                sim.stats.trim(max_data_points);
+                sim.stats.trim(left_layout[1].width.into());
             }
-            let history_len = sims[0].stats.len();
-
-            let mut global_max_y = 5.0f64;
-            let mut datasets_data = Vec::with_capacity(sims.len());
-
-            for sim in &sims {
-                let history = sim.stats.throughput_history();
-                let points: Vec<(f64, f64)> = history
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, &v)| {
-                        let x = i as f64 + max_data_points as f64 - history_len as f64;
-                        if x >= 0.0 && x < max_data_points as f64 {
-                            let val = v as f64;
-                            if val > global_max_y {
-                                global_max_y = val;
-                            }
-                            Some((x, val))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                datasets_data.push(points);
-            }
-
-            let datasets: Vec<Dataset> = (0..sims.len())
-                .map(|i| {
-                    let color = POLICY_COLORS[i & POLICY_COLORS.len()];
-                    let name = args.policies[i].as_str();
-                    Dataset::default()
-                        .name(name)
-                        .marker(symbols::Marker::Octant)
-                        .graph_type(GraphType::Line)
-                        .style(Style::default().fg(color))
-                        .data(&datasets_data[i])
-                })
-                .collect();
 
             let start = sims[0].stats.start / 1000;
             let end = sims[0].stats.end() / 1000;
-            let chart = Chart::new(datasets)
-                .block(Block::default().borders(Borders::ALL).title("Throughput"))
-                .legend_position(Some(LegendPosition::TopLeft))
-                .hidden_legend_constraints((Constraint::Min(0), Constraint::Min(0)))
-                .x_axis(
-                    Axis::default()
-                        .title("Time (Seconds)")
-                        .bounds([0.0, max_data_points as f64])
-                        .labels(vec![Line::from(format!("{:<6}", start)), Line::from(format!("{:>6}", end))]),
-                )
-                .y_axis(Axis::default().title("Served").bounds([0.0, global_max_y * 1.2]).labels(vec![
-                    Line::from(format!("{:<6}", "0")),
-                    Line::from(format!("{:<6.0}", global_max_y)),
-                ]));
 
-            f.render_widget(chart, chart_area);
+            let throughput = sims.iter().map(|s| s.stats.throughput().map(move |v| *v as f64)).collect();
+            render_graph(f, left_layout[1], &args.policies, throughput, "Throughput", "Served", start, end);
 
-            // 3. Combined Latency Percentile Chart (Time Series)
-            let hist_area = left_layout[2];
-            let q_target = quantiles[q_idx];
-            let mut hist_max_y = 0.1f64;
-            let mut hist_datasets_data = Vec::with_capacity(sims.len());
-
-            let max_lat_points = hist_area.width.saturating_sub(10) as usize;
-            for sim in &mut sims {
-                sim.stats.trim(max_lat_points);
-            }
-            let lat_history_len = sims[0].stats.len();
-
-            for sim in &sims {
-                let history = sim.stats.latency_history(q_target);
-                let points: Vec<(f64, f64)> = history
-                    .iter()
-                    .enumerate()
-                    .filter_map(|(i, &val)| {
-                        let x = i as f64 + max_lat_points as f64 - lat_history_len as f64;
-                        if x >= 0.0 && x < max_lat_points as f64 {
-                            let val_sec = val / 1000.0;
-                            if val_sec > hist_max_y {
-                                hist_max_y = val_sec;
-                            }
-                            Some((x, val_sec))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect();
-                hist_datasets_data.push(points);
-            }
-
-            let hist_datasets: Vec<Dataset> = (0..sims.len())
-                .map(|i| {
-                    let color = POLICY_COLORS[i & POLICY_COLORS.len()];
-                    let name = args.policies[i].as_str();
-                    Dataset::default()
-                        .name(name)
-                        .marker(symbols::Marker::Octant)
-                        .graph_type(GraphType::Line)
-                        .style(Style::default().fg(color))
-                        .data(&hist_datasets_data[i])
-                })
-                .collect();
-
-            let hist_chart = Chart::new(hist_datasets)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .title(format!("Latency P{}", q_target * 100.0)),
-                )
-                .legend_position(Some(LegendPosition::TopLeft))
-                .hidden_legend_constraints((Constraint::Min(0), Constraint::Min(0)))
-                .x_axis(
-                    Axis::default()
-                        .title("Time (Seconds)")
-                        .bounds([0.0, max_lat_points as f64])
-                        .labels(vec![Line::from(format!("{:<6}", start)), Line::from(format!("{:>6}", end))]),
-                )
-                .y_axis(
-                    Axis::default()
-                        .title("Latency (Seconds)")
-                        .bounds([0.0, hist_max_y * 1.1])
-                        .labels(vec![
-                            Line::from(format!("{:<8}", "0.00s")),
-                            Line::from(format!("{:<8.2}s", hist_max_y)),
-                        ]),
-                );
-
-            f.render_widget(hist_chart, hist_area);
+            let q = quantiles[q_idx];
+            let latency = sims.iter().map(|s| s.stats.latency(q).map(move |v| v / 1000.0)).collect();
+            let title = format!("Latency P{}", q * 100.0);
+            render_graph(f, left_layout[2], &args.policies, latency, &title, "Latency (Seconds)", start, end);
         })?;
 
         // Input Handling
@@ -312,4 +191,60 @@ fn main() -> std::io::Result<()> {
     execute!(terminal.backend_mut(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
     Ok(())
+}
+
+fn render_graph<I>(
+    f: &mut ratatui::Frame,
+    area: ratatui::layout::Rect,
+    policies: &[String],
+    y_data: Vec<I>,
+    title: &str,
+    y_label: &str,
+    start: u64,
+    end: u64,
+) where
+    I: Iterator<Item = f64>,
+{
+    let mut max_y = 0.0f64;
+    let points: Vec<Vec<(f64, f64)>> = y_data
+        .into_iter()
+        .map(|y_datum| {
+            y_datum
+                .enumerate()
+                .map(|(i, v)| {
+                    max_y = max_y.max(v);
+                    (i as f64, v)
+                })
+                .collect()
+        })
+        .collect();
+
+    let datasets: Vec<Dataset> = (0..points.len())
+        .map(|i| {
+            Dataset::default()
+                .name(policies[i].as_str())
+                .marker(symbols::Marker::Octant)
+                .graph_type(GraphType::Line)
+                .style(Style::default().fg(POLICY_COLORS[i % POLICY_COLORS.len()]))
+                .data(&points[i])
+        })
+        .collect();
+
+    let chart = Chart::new(datasets)
+        .block(Block::default().borders(Borders::ALL).title(title))
+        .legend_position(Some(LegendPosition::TopLeft))
+        .hidden_legend_constraints((Constraint::Min(0), Constraint::Min(0)))
+        .x_axis(
+            Axis::default()
+                .title("Time (Seconds)")
+                .bounds([0.0, area.width as f64])
+                .labels(vec![Line::from(format!("{:<6}", start)), Line::from(format!("{:>6}", end))]),
+        )
+        .y_axis(
+            Axis::default()
+                .title(y_label)
+                .bounds([0.0, max_y * 1.2])
+                .labels(vec![Line::from("0"), Line::from(format!("{:<8.2}", max_y))]),
+        );
+    f.render_widget(chart, area);
 }
