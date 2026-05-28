@@ -95,8 +95,4 @@ impl Policy for OpenAi {
         }
         elevator_idx
     }
-
-    fn name(&self) -> &'static str {
-        "OpenAI"
-    }
 }

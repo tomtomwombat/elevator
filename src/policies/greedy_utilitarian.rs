@@ -105,8 +105,4 @@ impl Policy for GreedyUtilitarian {
         self.maybe_refresh(b.prev_time);
         self.elevator_assignments[i]
     }
-
-    fn name(&self) -> &'static str {
-        "GreedyUtilitarian"
-    }
 }

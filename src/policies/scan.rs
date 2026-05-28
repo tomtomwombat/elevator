@@ -79,8 +79,4 @@ impl Policy for Scan {
 
         elevator
     }
-
-    fn name(&self) -> &'static str {
-        "Scan"
-    }
 }

@@ -88,6 +88,12 @@ pub struct Building {
     prev_req_time: u64,
 }
 
+impl Default for Building {
+    fn default() -> Self {
+        Self::builder().build()
+    }
+}
+
 #[derive(Default, Debug, Clone)]
 pub struct BuildingBuilder {
     time_per_floor: Option<u64>,
@@ -152,6 +158,10 @@ impl Building {
 
     pub fn time_per_floor(&self) -> u64 {
         self.time_per_floor
+    }
+
+    pub fn num_floors(&self) -> usize {
+        self.floors.len()
     }
 
     pub fn waiting_at(&self, floor: usize) -> usize {

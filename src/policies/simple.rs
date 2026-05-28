@@ -30,8 +30,4 @@ impl Policy for Simple {
         }
         elevator
     }
-
-    fn name(&self) -> &'static str {
-        "Simple"
-    }
 }

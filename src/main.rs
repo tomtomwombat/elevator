@@ -28,6 +28,13 @@ const INITIAL_TRAFFIC_SCALE: f64 = 0.1;
 const TICK_RATE: Duration = Duration::from_millis(20);
 
 const ELEV_COLORS: [Color; 6] = [Color::Red, Color::Green, Color::Yellow, Color::Blue, Color::Magenta, Color::Cyan];
+const POLICY_COLORS: [Color; 5] = [
+    Color::Indexed(99),
+    Color::Indexed(117),
+    Color::Indexed(33),
+    Color::Indexed(200),
+    Color::Indexed(82),
+];
 
 struct SimInstance {
     color: Color,
@@ -36,18 +43,12 @@ struct SimInstance {
     traffic: Box<dyn Traffic>,
     decision: Decision,
     stats: Stats,
+    name: String,
 }
 
-fn sim<P: Policy + 'static>(color: Color, building: Building, traffic: Box<dyn Traffic>, stats: Stats) -> SimInstance {
-    let decision = Decision::new(building.elevators.len());
-    let policy = Box::new(P::new(&building));
-    SimInstance {
-        color,
-        building,
-        policy,
-        traffic,
-        decision,
-        stats,
+impl SimInstance {
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 
@@ -57,24 +58,33 @@ fn traffic(floors: usize, scale: f64) -> Box<dyn Traffic> {
     Box::new(traffic::Cycle::new(vec![lull, spike], vec![60_000, 10_000]))
 }
 
-fn create_sims(floors: usize, elevators: usize, window_ms: u64, scale: f64) -> Vec<SimInstance> {
-    let b = Building::builder().floors(floors).elevators(elevators).build();
+fn create_sims(policies: &[String], b: Building, window_ms: u64, scale: f64) -> Vec<SimInstance> {
     let stats = Stats::new(window_ms);
-
-    vec![
-        //sim::<policies::Simple>(Color::Indexed(99), b.clone(), traffic(floors, scale), stats.clone()),
-        //sim::<policies::Scan>(Color::Indexed(117), b.clone(), traffic(floors, scale), stats.clone()),
-        sim::<policies::GreedyUtilitarian>(Color::Indexed(33), b.clone(), traffic(floors, scale), stats.clone()),
-        sim::<policies::Gemini2>(Color::Indexed(200), b.clone(), traffic(floors, scale), stats.clone()),
-        sim::<policies::OpenAi>(Color::Indexed(82), b.clone(), traffic(floors, scale), stats.clone()),
-        //sim::<policies::Bogo>(Color::Indexed(33), b.clone(), traffic(floors, scale), stats.clone()),
-    ]
+    let floors = b.num_floors();
+    policies
+        .iter()
+        .enumerate()
+        .map(|(i, name)| {
+            let color = POLICY_COLORS[i % POLICY_COLORS.len()];
+            let decision = Decision::new(b.elevators.len());
+            let policy = policies::new(name, &b);
+            SimInstance {
+                color,
+                building: b.clone(),
+                policy,
+                traffic: traffic(floors, scale),
+                decision,
+                stats: stats.clone(),
+                name: name.into(),
+            }
+        })
+        .collect()
 }
 
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
-    let floors = args.floors;
-    let elevators = args.elevators;
+    let b = args.building();
+    let floors = b.num_floors();
 
     let quantiles = [0.5, 0.95, 0.99, 0.999];
     let mut q_idx = 0;
@@ -82,7 +92,7 @@ fn main() -> std::io::Result<()> {
     let mut current_window_ms = INITIAL_WINDOW_MS;
     let mut traffic_scale = INITIAL_TRAFFIC_SCALE;
 
-    let mut sims = create_sims(floors, elevators, current_window_ms, traffic_scale);
+    let mut sims = create_sims(&args.policies, b.clone(), current_window_ms, traffic_scale);
 
     enable_raw_mode()?;
     let mut stdout = std::io::stdout();
@@ -113,7 +123,7 @@ fn main() -> std::io::Result<()> {
 
             // 1. Controls Panel
             let speed_text = format!(
-                " [Q] Quit    [+/-] Speed ({}x)    [</>] Window ({}s)    [←/→] P    [↑/↓] Traffic Scale {:.3}    [Tab] Switch Visualization",
+                " [Q] Quit    [+/-] Speed ({}x)    [</>] Window ({}s)    [←/→] Policy    [↑/↓] Traffic Scale {:.3}    [Tab] Switch Visualization",
                 sim_speed,
                 current_window_ms / 1000,
                 traffic_scale,
@@ -167,7 +177,7 @@ fn main() -> std::io::Result<()> {
             }
             f.render_widget(
                 Paragraph::new(vis_lines).block(Block::default().borders(Borders::ALL).title(Span::styled(
-                    format!("Visualization ({})", vis_sim.policy.name()),
+                    format!("Visualization ({})", vis_sim.name()),
                     Style::default().add_modifier(Modifier::BOLD),
                 ))),
                 app_layout[1],
@@ -210,7 +220,7 @@ fn main() -> std::io::Result<()> {
                 .enumerate()
                 .map(|(i, sim)| {
                     Dataset::default()
-                        .name(sim.policy.name())
+                        .name(sim.name())
                         .marker(symbols::Marker::Octant)
                         .graph_type(GraphType::Line)
                         .style(Style::default().fg(sim.color))
@@ -275,7 +285,7 @@ fn main() -> std::io::Result<()> {
                 .enumerate()
                 .map(|(i, sim)| {
                     Dataset::default()
-                        .name(sim.policy.name())
+                        .name(sim.name())
                         .marker(symbols::Marker::Octant)
                         .graph_type(GraphType::Line)
                         .style(Style::default().fg(sim.color))
@@ -327,11 +337,11 @@ fn main() -> std::io::Result<()> {
                     KeyCode::Tab => vis_idx = (vis_idx + 1) % sims.len(),
                     KeyCode::Char(',') | KeyCode::Char('<') => {
                         current_window_ms = (current_window_ms / 2).max(1000);
-                        sims = create_sims(floors, elevators, current_window_ms, traffic_scale);
+                        sims = create_sims(&args.policies, b.clone(), current_window_ms, traffic_scale);
                     }
                     KeyCode::Char('>') | KeyCode::Char('.') => {
                         current_window_ms = (current_window_ms * 2).min(3600_000);
-                        sims = create_sims(floors, elevators, current_window_ms, traffic_scale);
+                        sims = create_sims(&args.policies, b.clone(), current_window_ms, traffic_scale);
                     }
                     KeyCode::Down => {
                         traffic_scale = (traffic_scale - 0.1).max(0.0);

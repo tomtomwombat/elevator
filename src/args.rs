@@ -1,3 +1,4 @@
+use crate::policies;
 use crate::{Building, BuildingBuilder};
 use clap::Parser;
 
@@ -19,6 +20,13 @@ pub struct Args {
     /// time it takes to stop at a floor (ms)
     #[arg(long, default_value_t = BuildingBuilder::DEFAULT_TIME_PER_STOP)]
     pub time_per_stop: u64,
+
+    #[arg(
+        short, long, num_args = 1..,
+        value_parser = clap::builder::PossibleValuesParser::new(policies::ALL),
+        default_values_t = policies::DEFAULT.iter().map(|s| String::from(*s)),
+    )]
+    pub policies: Vec<String>,
 }
 
 impl Args {
@@ -30,5 +38,17 @@ impl Args {
             .time_per_floor(self.time_per_floor)
             .time_per_stop(self.time_per_stop)
             .build()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use clap::CommandFactory;
+
+    #[test]
+    fn verify_cli() {
+        // Automatically dissects entire Clap configuration
+        Args::command().debug_assert();
     }
 }

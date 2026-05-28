@@ -113,8 +113,4 @@ impl Policy for Gemini2 {
 
         elevator_idx
     }
-
-    fn name(&self) -> &'static str {
-        "Gemini2"
-    }
 }

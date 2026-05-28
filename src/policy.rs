@@ -27,6 +27,4 @@ pub trait Policy {
     fn arrival(&mut self, _building: &Building, _decision: &mut Decision, _elevator: usize) {}
     /// Notifies the policy that some time has passed.
     fn waited(&mut self, _building: &Building, _decision: &mut Decision, _elevator: usize) {}
-    /// Policy name (displayed in benchmarks)
-    fn name(&self) -> &'static str;
 }

@@ -36,8 +36,4 @@ impl Policy for Bogo {
         }
         decision.dests[elevator] = Some(next);
     }
-
-    fn name(&self) -> &'static str {
-        "Bogo"
-    }
 }
