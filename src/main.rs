@@ -12,10 +12,11 @@ use elevator::{
     traffic::{self, Traffic},
 };
 use ratatui::{
-    Terminal,
+    Frame, Terminal,
     backend::CrosstermBackend,
+    layout::Rect,
     layout::{Constraint, Direction, Layout},
-    style::{Color, Modifier, Style},
+    style::{Color, Style},
     symbols,
     text::{Line, Span},
     widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, LegendPosition, Paragraph},
@@ -24,7 +25,6 @@ use std::time::{Duration, Instant};
 
 const TICK_RATE: Duration = Duration::from_millis(20);
 
-const ELEV_COLORS: [Color; 6] = [Color::Red, Color::Green, Color::Yellow, Color::Blue, Color::Magenta, Color::Cyan];
 const POLICY_COLORS: [Color; 5] = [
     Color::Indexed(99),
     Color::Indexed(117),
@@ -46,6 +46,7 @@ fn main() -> std::io::Result<()> {
 
     let quantiles = [0.5, 0.95, 0.99, 0.999];
     let mut q_idx = 0;
+    let mut vis = Visualization::new(floors, b.elevators.len());
     let mut vis_idx = 0;
 
     let mut controls = Controls::default();
@@ -85,65 +86,13 @@ fn main() -> std::io::Result<()> {
                 ])
                 .split(app_layout[0]);
 
-            // 1. Controls Panel
             f.render_widget(
                 Paragraph::new(controls.to_string()).block(Block::default().borders(Borders::ALL).title("Simulation Controls")),
                 left_layout[0],
             );
 
-            // 2. Elevator Visualization Panel (Full Height on Right)
-            let vis_sim = &sims[vis_idx];
-            let mut vis_lines = Vec::new();
-            let tpf = vis_sim.building.time_per_floor();
-
-            for f_idx in (0..floors).rev() {
-                let mut line_spans = vec![Span::raw(format!("{:>2} ", f_idx))];
-                for (e_idx, e) in vis_sim.building.elevators.iter().enumerate() {
-                    let color = ELEV_COLORS[e_idx % ELEV_COLORS.len()];
-                    let pos_f = e.pos as f64 / tpf as f64;
-                    if (pos_f - f_idx as f64).abs() <= 0.25 {
-                        let elevator_icon = format!("[{}] ", e.passengers.len());
-                        line_spans.push(Span::styled(elevator_icon, Style::default().fg(color)));
-                    } else {
-                        line_spans.push(Span::styled(" ║  ", Style::default().fg(Color::White)));
-                    }
-                }
-                line_spans.push(Span::raw(" "));
-                for e_idx in 0..vis_sim.building.elevators.len() {
-                    let color = ELEV_COLORS[e_idx % ELEV_COLORS.len()];
-                    let count = vis_sim.building.waiting_for_elevator(f_idx, e_idx);
-                    let to_draw = std::cmp::min(count, 6);
-                    if to_draw > 0 {
-                        line_spans.push(Span::styled("☺".repeat(to_draw), Style::default().fg(color)));
-                    }
-                    if count > to_draw {
-                        line_spans.push(Span::styled(format!("+{}", count - to_draw), Style::default().fg(color)));
-                    }
-                }
-                vis_lines.push(Line::from(line_spans));
-
-                if f_idx > 0 {
-                    let mut spacer_spans = vec![Span::raw("   ")];
-                    for (e_idx, e) in vis_sim.building.elevators.iter().enumerate() {
-                        let color = ELEV_COLORS[e_idx % ELEV_COLORS.len()];
-                        let pos_f = e.pos as f64 / tpf as f64;
-                        if pos_f < f_idx as f64 - 0.25 && pos_f > f_idx as f64 - 0.75 {
-                            let elevator_icon = format!("[{}] ", e.passengers.len());
-                            spacer_spans.push(Span::styled(elevator_icon, Style::default().fg(color)));
-                        } else {
-                            spacer_spans.push(Span::styled(" ║  ", Style::default().fg(Color::White)));
-                        }
-                    }
-                    vis_lines.push(Line::from(spacer_spans));
-                }
-            }
-            f.render_widget(
-                Paragraph::new(vis_lines).block(Block::default().borders(Borders::ALL).title(Span::styled(
-                    format!("Visualization ({})", args.policies[vis_idx]),
-                    Style::default().add_modifier(Modifier::BOLD),
-                ))),
-                app_layout[1],
-            );
+            vis.update(&sims[vis_idx], &args.policies[vis_idx]);
+            vis.render(f, app_layout[1], &sims[vis_idx]);
 
             for sim in &mut sims {
                 sim.stats.trim(left_layout[1].width.into());
@@ -153,12 +102,12 @@ fn main() -> std::io::Result<()> {
             let end = sims[0].stats.end() / 1000;
 
             let throughput = sims.iter().map(|s| s.stats.throughput().map(move |v| *v as f64)).collect();
-            render_graph(f, left_layout[1], &args.policies, throughput, "Throughput", "Served", start, end);
+            render_graph(f, left_layout[1], &args.policies, throughput, "Throughput", start, end);
 
             let q = quantiles[q_idx];
             let latency = sims.iter().map(|s| s.stats.latency(q).map(move |v| v / 1000.0)).collect();
-            let title = format!("Latency P{}", q * 100.0);
-            render_graph(f, left_layout[2], &args.policies, latency, &title, "Latency (Seconds)", start, end);
+            let title = format!("Latency (Seconds) P{}", q * 100.0);
+            render_graph(f, left_layout[2], &args.policies, latency, &title, start, end);
         })?;
 
         // Input Handling
@@ -197,16 +146,145 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
-fn render_graph<I>(
-    f: &mut ratatui::Frame,
-    area: ratatui::layout::Rect,
-    policies: &[String],
-    y_data: Vec<I>,
-    title: &str,
-    y_label: &str,
-    start: u64,
-    end: u64,
-) where
+const ELEV_COLORS: [Color; 10] = [
+    Color::from_u32(0x5e4fa2),
+    Color::from_u32(0x3288bd),
+    Color::from_u32(0x66c2a5),
+    Color::from_u32(0xabdda4),
+    Color::from_u32(0xe6f598),
+    Color::from_u32(0xfee08b),
+    Color::from_u32(0xfdae61),
+    Color::from_u32(0xf46d43),
+    Color::from_u32(0xd53e4f),
+    Color::from_u32(0x9e0142),
+];
+
+pub struct Visualization {
+    floor_labels: Vec<String>,
+    elevator_bufs: Vec<String>,
+    plus_bufs: Vec<String>,
+    title: String,
+    elevator_rows: Vec<u64>,
+}
+
+impl Visualization {
+    pub fn new(floors: usize, elevators: usize) -> Self {
+        let floor_labels = (0..floors).map(|i| format!("{:>2} ", i)).collect();
+        Self {
+            floor_labels,
+            elevator_bufs: vec![String::with_capacity(4); elevators],
+            plus_bufs: vec![String::with_capacity(4); floors * elevators],
+            title: Default::default(),
+            elevator_rows: vec![0; elevators],
+        }
+    }
+
+    fn title(&mut self, name: &str) {
+        self.title.clear();
+        self.title.push_str("Visualization (");
+        self.title.push_str(name);
+        self.title.push(')');
+    }
+
+    fn waiting_lines<'a: 'b, 'b>(&'a self, spans: &mut Vec<Span<'b>>, sim: &Simulation, floor: usize) {
+        spans.push(Span::raw(" "));
+        const FACES: &'static str = "☺☺☺☺☺☺";
+        let elevators = self.elevator_bufs.len();
+        for e_idx in 0..elevators {
+            let style = Style::default().fg(ELEV_COLORS[e_idx % ELEV_COLORS.len()]);
+            let count = sim.building.waiting_for_elevator(floor, e_idx);
+            let show = count.min(FACES.chars().count());
+            if show > 0 {
+                spans.push(Span::styled(&FACES[..(show * "☺".len())], style));
+            }
+            if count > show {
+                spans.push(Span::styled(self.plus_bufs[floor * elevators + e_idx].as_str(), style));
+            }
+        }
+    }
+
+    fn rows(floors: usize) -> impl Iterator<Item = (usize, usize, bool)> {
+        (0..floors * 2 - 1).rev().map(|row| (row, row / 2, row % 2 == 0))
+    }
+
+    pub fn update(&mut self, sim: &Simulation, name: &str) {
+        let building = &sim.building;
+        let floors = building.num_floors();
+        let tpf = building.time_per_floor();
+        for (i, e) in building.elevators.iter().enumerate() {
+            self.elevator_rows[i] = (e.pos * 2 + tpf / 2) / tpf;
+        }
+        self.title(name);
+        for (row, floor, is_floor) in Self::rows(floors) {
+            for (e_idx, e) in building.elevators.iter().enumerate() {
+                if self.elevator_rows[e_idx] == row as u64 {
+                    let buf = &mut self.elevator_bufs[e_idx];
+                    buf.clear();
+                    buf.push('[');
+                    buf.push_str(itoa::Buffer::new().format(e.passengers.len()));
+                    buf.push_str("] ");
+                }
+            }
+            if is_floor {
+                let elevators = building.elevators.len();
+                for e_idx in 0..elevators {
+                    let count = building.waiting_for_elevator(floor, e_idx);
+                    let shown = count.min(6);
+                    if count > shown {
+                        let i = floor * elevators + e_idx;
+                        self.plus_bufs[i].clear();
+                        self.plus_bufs[i].push('+');
+                        self.plus_bufs[i].push_str(itoa::Buffer::new().format(count - shown));
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn render(&self, f: &mut Frame, area: Rect, sim: &Simulation) {
+        let building = &sim.building;
+        let floors = building.num_floors();
+        let elevators = &building.elevators;
+
+        let mut lines = Vec::with_capacity(64);
+        let content_height = floors as u16 * 2;
+        let inner_height = area.height.saturating_sub(2);
+        let top_padding = inner_height.saturating_sub(content_height);
+        for _ in 0..top_padding {
+            lines.push(Line::default());
+        }
+
+        for (row, floor, is_floor) in Self::rows(floors) {
+            let mut spans = Vec::with_capacity(2 + elevators.len() * 2);
+
+            // floor label
+            spans.push(Span::raw(if is_floor { self.floor_labels[floor].as_str() } else { "   " }));
+
+            // elevators
+            for e_idx in 0..elevators.len() {
+                let style = Style::default().fg(ELEV_COLORS[e_idx % ELEV_COLORS.len()]);
+                if self.elevator_rows[e_idx] == row as u64 {
+                    spans.push(Span::styled(self.elevator_bufs[e_idx].as_str(), style));
+                } else {
+                    spans.push(Span::styled(" ║  ", style));
+                }
+            }
+
+            // waiting people
+            if is_floor {
+                self.waiting_lines(&mut spans, &sim, floor);
+            }
+
+            lines.push(Line::from(spans));
+        }
+
+        let block = Block::default().borders(Borders::ALL).title(self.title.as_str());
+        f.render_widget(Paragraph::new(lines).block(block), area);
+    }
+}
+
+fn render_graph<I>(f: &mut Frame, area: Rect, policies: &[String], y_data: Vec<I>, title: &str, start: u64, end: u64)
+where
     I: Iterator<Item = f64>,
 {
     let mut max_y = 0.0f64;
@@ -246,7 +324,6 @@ fn render_graph<I>(
         )
         .y_axis(
             Axis::default()
-                .title(y_label)
                 .bounds([0.0, max_y * 1.2])
                 .labels(vec![Line::from("0"), Line::from(format!("{:<8.2}", max_y))]),
         );
