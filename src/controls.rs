@@ -1,4 +1,3 @@
-use crate::Stats;
 use crate::simulation::Simulation;
 use crossterm::event::KeyCode;
 use std::fmt;
@@ -7,7 +6,7 @@ const DEFAULT_SPEED: u64 = 1;
 const DEFAULT_STATS_WINDOW: u64 = 1_000;
 const DEFAULT_TRAFFIC_SCALE: f64 = 0.1;
 
-const MAX_SPEED: u64 = 1048576;
+const MAX_SPEED: u64 = 1 << 20;
 
 pub struct Controls {
     speed: u64,
@@ -33,13 +32,13 @@ impl Controls {
             KeyCode::Char(',') | KeyCode::Char('<') => {
                 self.stats_window = (self.stats_window / 2).max(1000);
                 for s in sims.iter_mut() {
-                    s.stats = Stats::new(self.stats_window, s.building.prev_time());
+                    s.stats.reset(s.building.prev_time(), self.stats_window);
                 }
             }
             KeyCode::Char('>') | KeyCode::Char('.') => {
                 self.stats_window = (self.stats_window * 2).min(3600_000);
                 for s in sims.iter_mut() {
-                    s.stats = Stats::new(self.stats_window, s.building.prev_time());
+                    s.stats.reset(s.building.prev_time(), self.stats_window);
                 }
             }
             KeyCode::Down => {

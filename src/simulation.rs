@@ -11,7 +11,7 @@ pub struct Simulation {
 impl Simulation {
     pub fn new(building: Building, policy: Box<dyn Policy>, traffic: Box<dyn Traffic>, c: &Controls) -> Self {
         let decision = Decision::new(building.elevators.len());
-        let stats = Stats::new(c.stats_window(), 0);
+        let stats = Stats::new(c.stats_window(), 0, 1024);
         Self {
             building,
             decision,

@@ -330,7 +330,7 @@ mod tests {
         let mut building = Building::builder().floors(10).elevators(2).build();
         let mut policy = crate::policies::Simple::default();
         let mut traffic = Random::new(10, vec![5.0], vec![5.0], 0.1);
-        let mut stats = Stats::new(1_000, 0);
+        let mut stats = Stats::new(1_000, 0, 1024);
         let mut decision = Decision::new(building.elevators.len());
 
         building.run(10_000, &mut policy, &mut decision, &mut traffic, &mut stats);
