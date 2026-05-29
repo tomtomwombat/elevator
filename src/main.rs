@@ -33,6 +33,8 @@ const POLICY_COLORS: [Color; 5] = [
     Color::Indexed(82),
 ];
 
+const QUANTILES: [f64; 4] = [0.5, 0.95, 0.99, 0.999];
+
 fn traffic(floors: usize, scale: f64) -> Box<dyn Traffic> {
     let lull = Box::new(traffic::Random::new(floors, vec![floors as f64], vec![floors as f64], scale));
     let spike = Box::new(traffic::Random::new(floors, vec![floors as f64], vec![floors as f64], 10.0 * scale));
@@ -44,14 +46,13 @@ fn main() -> std::io::Result<()> {
     let b = args.building();
     let floors = b.num_floors();
 
-    let quantiles = [0.5, 0.95, 0.99, 0.999];
     let mut q_idx = 0;
     let mut vis = Visualization::new(floors, b.elevators.len());
     let mut vis_idx = 0;
 
     let mut controls = Controls::default();
 
-    let mut sims: Vec<Simulation> = args
+    let mut sims: Vec<_> = args
         .policies
         .iter()
         .map(|name| {
@@ -79,11 +80,7 @@ fn main() -> std::io::Result<()> {
             // Vertical split for the left side: Controls, Throughput, and Latency
             let left_layout = Layout::default()
                 .direction(Direction::Vertical)
-                .constraints([
-                    Constraint::Length(3),      // Controls
-                    Constraint::Percentage(50), // Throughput Comparison
-                    Constraint::Percentage(50), // Latency Time Series
-                ])
+                .constraints([Constraint::Length(3), Constraint::Percentage(50), Constraint::Percentage(50)])
                 .split(app_layout[0]);
 
             f.render_widget(
@@ -104,8 +101,8 @@ fn main() -> std::io::Result<()> {
             let throughput = sims.iter().map(|s| s.stats.throughput().map(move |v| *v as f64)).collect();
             render_graph(f, left_layout[1], &args.policies, throughput, "Throughput", start, end);
 
-            let q = quantiles[q_idx];
-            let latency = sims.iter().map(|s| s.stats.latency(q).map(move |v| v / 1000.0)).collect();
+            let q = QUANTILES[q_idx];
+            let latency = sims.iter().map(|s| s.stats.latencies(q).map(move |v| v / 1000.0)).collect();
             let title = format!("Latency (Seconds) P{}", q * 100.0);
             render_graph(f, left_layout[2], &args.policies, latency, &title, start, end);
         })?;
@@ -120,7 +117,7 @@ fn main() -> std::io::Result<()> {
 
                 match key.code {
                     KeyCode::Char('q') | KeyCode::Char('Q') => break,
-                    KeyCode::Right => q_idx = (q_idx + 1) % quantiles.len(),
+                    KeyCode::Right => q_idx = (q_idx + 1) % QUANTILES.len(),
                     KeyCode::Left => q_idx = q_idx.saturating_sub(1),
                     KeyCode::Tab => vis_idx = (vis_idx + 1) % sims.len(),
                     _ => {}
@@ -186,6 +183,15 @@ impl Visualization {
         self.title.push(')');
     }
 
+    /*
+    fn stats<'n: 'l, 'l>(&self, lines: &mut Vec<Line<'l>>, sim: &Simulation, name: &'n str, color: Color) {
+        let t = format!("Served {}   | p50 = {:<8} | p99 = {:<8} ", sim.stats.served(), (sim.stats.latency(0.5) / 1000.0) as u64, (sim.stats.latency(0.99) / 1000.0) as u64);
+        let style = Style::default().fg(color);
+        lines.push(Line::from(Span::styled(name, style)));
+        lines.push(Line::from(Span::styled(t, style)));
+    }
+    */
+
     fn waiting_lines<'a: 'b, 'b>(&'a self, spans: &mut Vec<Span<'b>>, sim: &Simulation, floor: usize) {
         spans.push(Span::raw(" "));
         const FACES: &'static str = "☺☺☺☺☺☺";
@@ -247,6 +253,8 @@ impl Visualization {
         let elevators = &building.elevators;
 
         let mut lines = Vec::with_capacity(64);
+        // self.stats(&mut lines, sim, name, color);
+
         let content_height = floors as u16 * 2;
         let inner_height = area.height.saturating_sub(2);
         let top_padding = inner_height.saturating_sub(content_height);
