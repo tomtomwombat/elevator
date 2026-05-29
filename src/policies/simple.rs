@@ -26,7 +26,7 @@ impl Policy for Simple {
     fn request(&mut self, _: &Building, decision: &mut Decision, _: &Person) -> usize {
         let elevator = self.rng.usize(0..decision.dests.len());
         if decision.dests[elevator].is_none() {
-            decision.dests[elevator] = Some(elevator);
+            decision.dests[elevator] = Some(0);
         }
         elevator
     }
