@@ -16,7 +16,7 @@ use crate::traffic::Traffic;
 /// Maximum number of people on a floor waiting for an elevator.
 /// Prevents potentially overwhelming memory when speeding up the simulator
 /// massively.
-const MAX_WAITING: usize = 100_000;
+const MAX_WAITING: usize = 1_000;
 
 #[derive(Default, Debug, Copy, Clone)]
 pub struct Person {

@@ -23,7 +23,7 @@ use ratatui::{
 };
 use std::time::{Duration, Instant};
 
-const TICK_RATE: Duration = Duration::from_millis(20);
+const TICK_RATE: Duration = Duration::from_millis(10);
 
 const POLICY_COLORS: [Color; 5] = [
     Color::Indexed(99),
@@ -178,7 +178,7 @@ impl Visualization {
 
     fn title(&mut self, name: &str) {
         self.title.clear();
-        self.title.push_str("Visualization (");
+        self.title.push_str("Policy Visualization (");
         self.title.push_str(name);
         self.title.push(')');
     }

@@ -74,7 +74,7 @@ impl fmt::Display for Controls {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            " [Q] Quit    [+/-] Speed ({}x)    [</>] Window ({}s)    [←/→] Policy    [↑/↓] Traffic Scale {:.3}    [Tab] Switch Visualization",
+            " [Q] Quit   [+/-] Speed ({}x)   [</>] Window ({}s)   [←/→] Latency Quantile   [↑/↓] Traffic Scale {:.3}   [Tab] Switch Policy Visualization",
             self.speed(),
             self.stats_window() / 1000,
             self.traffic_scale()
