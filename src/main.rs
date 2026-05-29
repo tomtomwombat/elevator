@@ -112,8 +112,12 @@ fn main() -> std::io::Result<()> {
                 for e_idx in 0..vis_sim.building.elevators.len() {
                     let color = ELEV_COLORS[e_idx % ELEV_COLORS.len()];
                     let count = vis_sim.building.waiting_for_elevator(f_idx, e_idx);
-                    if count > 0 {
-                        line_spans.push(Span::styled("☺".repeat(count), Style::default().fg(color)));
+                    let to_draw = std::cmp::min(count, 6);
+                    if to_draw > 0 {
+                        line_spans.push(Span::styled("☺".repeat(to_draw), Style::default().fg(color)));
+                    }
+                    if count > to_draw {
+                        line_spans.push(Span::styled(format!("+{}", count - to_draw), Style::default().fg(color)));
                     }
                 }
                 vis_lines.push(Line::from(line_spans));
