@@ -1,5 +1,6 @@
 use crate::{Building, Person};
 
+#[derive(Clone, Debug)]
 pub struct Decision {
     // Wait commands set by the policy
     pub waits: Box<[u64]>,

@@ -166,11 +166,7 @@ impl Building {
         self.floors.len()
     }
 
-    pub fn waiting_at(&self, floor: usize) -> usize {
-        self.floors[floor].people.iter().map(|q| q.len()).sum()
-    }
-
-    pub fn waiting_for_elevator(&self, floor: usize, elevator: usize) -> usize {
+    pub fn waiting(&self, floor: usize, elevator: usize) -> usize {
         self.floors[floor].people[elevator].len()
     }
 
@@ -196,10 +192,10 @@ impl Building {
             let events = [arrival_time, decision.waits[waiting], next_request];
             let (next_event, &time) = events.iter().enumerate().min_by_key(|&(_, &v)| v).unwrap();
             assert!(time >= self.prev_time);
+            trace!(time = time, event = %"Events", ?events);
             if time > until {
                 break;
             }
-            trace!(time = time, event = %"Events", ?events);
             self.move_elevators(time, &decision.dests);
             match next_event {
                 // Process an elevator arriving at a floor and opening it's doors.
@@ -209,9 +205,7 @@ impl Building {
                     let e = &mut self.elevators[arriving];
                     let floor_idx = e.floor(self.time_per_floor);
                     e.busy_until = time + self.time_per_stop;
-
                     assert_eq!(e.pos, decision.dests[arriving].unwrap() as u64 * self.time_per_floor);
-                    debug!(time = time, event = %"Arrival", elevator = arriving, floor = floor_idx, waiting = ?self.floors[floor_idx].people[arriving]);
 
                     decision.dests[arriving] = None;
                     e.passengers.retain(|&x| {
@@ -223,10 +217,13 @@ impl Building {
                             true
                         }
                     });
+                    let waiting = &self.floors[floor_idx].people[arriving];
+                    debug!(time = time, event = %"Arrival", elevator = arriving, floor = floor_idx, waiting = ?waiting);
                     let space = e.capacity - e.passengers.len();
-                    let entering = std::cmp::min(space, self.floors[floor_idx].people[arriving].len());
-                    let new = self.floors[floor_idx].people[arriving].drain(0..entering);
-                    e.passengers.extend(new.into_iter());
+                    let entering = waiting.len().min(space);
+                    for _ in 0..entering {
+                        e.passengers.push(self.floors[floor_idx].people[arriving].pop_front().unwrap());
+                    }
                     debug!(
                         time = time,
                         event = %"Entry",

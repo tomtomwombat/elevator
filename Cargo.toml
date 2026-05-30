@@ -14,3 +14,9 @@ itoa = "1.0.18"
 
 [dev-dependencies]
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+criterion = "0.8.2"
+
+
+[[bench]]
+name = "sim"
+harness = false

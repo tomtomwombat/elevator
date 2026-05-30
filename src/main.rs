@@ -198,7 +198,7 @@ impl Visualization {
         let elevators = self.elevator_bufs.len();
         for e_idx in 0..elevators {
             let style = Style::default().fg(ELEV_COLORS[e_idx % ELEV_COLORS.len()]);
-            let count = sim.building.waiting_for_elevator(floor, e_idx);
+            let count = sim.building.waiting(floor, e_idx);
             let show = count.min(FACES.chars().count());
             if show > 0 {
                 spans.push(Span::styled(&FACES[..(show * "☺".len())], style));
@@ -234,7 +234,7 @@ impl Visualization {
             if is_floor {
                 let elevators = building.elevators.len();
                 for e_idx in 0..elevators {
-                    let count = building.waiting_for_elevator(floor, e_idx);
+                    let count = building.waiting(floor, e_idx);
                     let shown = count.min(6);
                     if count > shown {
                         let i = floor * elevators + e_idx;
